@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Baby Manuel 👶</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    /* Impede comportamentos indesejados no mobile ao arrastar */
+    touch-action: none;
+}
+
+body{
+    background:#fdf7ef;
+    overflow:hidden;
+    font-family:Arial,sans-serif;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+}
+
+#game{
+    width:100vw;
+    height:100vh;
+    position:relative;
+    background:linear-gradient(#dff5ff,#fff8e8);
+}
+
+#baby{
+    position:absolute;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:60px;
+    /* Evita que o utilizador selecione o emoji por engano */
+    user-select: none;
+    transition: left 0.05s linear;
+}
+
+.item{
+    position:absolute;
+    font-size:40px;
+    user-select: none;
+}
+
+#score{
+    position:absolute;
+    top:20px;
+    left:20px;
+    font-size:28px;
+    font-weight:bold;
+    color:#6b3f2d;
+    user-select: none;
+}
+
+#message{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:white;
+    padding:30px;
+    border-radius:20px;
+    display:none;
+    text-align:center;
+    box-shadow:0 0 20px rgba(0,0,0,.2);
+    z-index: 10;
+    width: 85%;
+    max-width: 400px;
+}
+
+#restart-btn {
+    margin-top: 15px;
+    padding: 10px 20px;
+    font-size: 16px;
+    background: #6b3f2d;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="game">
+
+<div id="score">Pontos: 0</div>
+
+<div id="baby">👶</div>
+
+<div id="message"></div>
+
+</div>
+
+<script>
+
+const baby = document.getElementById("baby");
+const scoreEl = document.getElementById("score");
+const msg = document.getElementById("message");
+
+let score = 0;
+let babyX = window.innerWidth / 2;
+const speed = 25; // Velocidade do movimento com as setas
+let activeIntervals = [];
+let gameLoop;
+let isGameOver = false;
+
+// Atualiza a posição visual do bebé garantindo que não sai do ecrã
+function updateBabyPosition() {
+    const babyWidth = baby.offsetWidth || 60;
+    // Limites do ecrã
+    if (babyX < babyWidth / 2) babyX = babyWidth / 2;
+    if (babyX > window.innerWidth - babyWidth / 2) babyX = window.innerWidth - babyWidth / 2;
+    
+    baby.style.left = babyX + "px";
+}
+
+// 1. Controlo por Rato (Desktop)
+document.addEventListener("mousemove",(e)=>{
+    if (isGameOver) return;
+    babyX = e.clientX;
+    updateBabyPosition();
+});
+
+// 2. Controlo por Toque (Mobile)
+document.addEventListener("touchmove",(e)=>{
+    if (isGameOver) return;
+    babyX = e.touches[0].clientX;
+    updateBabyPosition();
+}, { passive: true });
+
+// 3. Controlo por Setas do Teclado (Desktop)
+document.addEventListener("keydown", (e) => {
+    if (isGameOver) return;
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        babyX -= speed;
+        updateBabyPosition();
+    } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        babyX += speed;
+        updateBabyPosition();
+    }
+});
+
+function createItem(){
+    if (isGameOver) return;
+
+    const item = document.createElement("div");
+    const good = Math.random() > 0.25;
+
+    item.innerHTML = good
+        ? (Math.random()>0.5 ? "🍼" : "🧸")
+        : "💩";
+
+    item.classList.add("item");
+
+    let x = Math.random() * (window.innerWidth - 40);
+    item.style.left = x + "px";
+    item.style.top = "-50px";
+
+    document.getElementById("game").appendChild(item);
+
+    let y = -50;
+
+    const fall = setInterval(()=>{
+        if (isGameOver) {
+            clearInterval(fall);
+            return;
+        }
+
+        y += 5;
+        item.style.top = y + "px";
+
+        const babyRect = baby.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+
+        // Colisão simplificada e ajustada para mobile
+        if(
+            itemRect.bottom > babyRect.top &&
+            itemRect.top < babyRect.bottom &&
+            itemRect.left < babyRect.right &&
+            itemRect.right > babyRect.left
+        ) {
+            if(item.innerHTML==="💩"){
+                endGame();
+            } else {
+                score++;
+                scoreEl.innerHTML = "Pontos: " + score;
+            }
+
+            item.remove();
+            clearInterval(fall);
+        }
+
+        if(y > window.innerHeight){
+            item.remove();
+            clearInterval(fall);
+        }
+
+    },20);
+
+    activeIntervals.push(fall);
+}
+
+function startGame() {
+    score = 0;
+    isGameOver = false;
+    babyX = window.innerWidth / 2;
+    updateBabyPosition();
+    scoreEl.innerHTML = "Pontos: 0";
+    msg.style.display = "none";
+    
+    // Limpar itens antigos se sobrarem
+    document.querySelectorAll('.item').forEach(item => item.remove());
+    
+    gameLoop = setInterval(createItem, 900);
+}
+
+function endGame(){
+    isGameOver = true;
+    clearInterval(gameLoop);
+    
+    // Limpa todos os intervalos de queda ativos
+    activeIntervals.forEach(clearInterval);
+    activeIntervals = [];
+
+    msg.style.display="block";
+
+    msg.innerHTML = `
+        <h2>👶 Baby Manuel agradece!</h2>
+        <br>
+        <p>Conseguiste <strong>${score}</strong> pontos.</p>
+        <br>
+        <p>
+        Se fizeste mais de 15 pontos,<br>
+        mereces uma bifana extra no churrasco!
+        </p>
+        <button id="restart-btn" onclick="startGame()">Jogar Novamente</button>
+    `;
+}
+
+// Inicia o jogo automaticamente
+startGame();
+
+// Ajusta a posição do bebé caso o ecrã mude de tamanho (ex: rodar o telemóvel)
+window.addEventListener('resize', updateBabyPosition);
+
+</script>
+
+</body>
+</html>
