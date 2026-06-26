@@ -10,7 +10,6 @@
     margin:0;
     padding:0;
     box-sizing:border-box;
-    /* Impede comportamentos indesejados no mobile ao arrastar */
     touch-action: none;
 }
 
@@ -36,7 +35,6 @@ body{
     left:50%;
     transform:translateX(-50%);
     font-size:60px;
-    /* Evita que o utilizador selecione o emoji por engano */
     user-select: none;
     transition: left 0.05s linear;
 }
@@ -74,9 +72,10 @@ body{
 }
 
 #restart-btn {
-    margin-top: 15px;
-    padding: 10px 20px;
-    font-size: 16px;
+    margin-top: 20px;
+    padding: 12px 25px;
+    font-size: 18px;
+    font-weight: bold;
     background: #6b3f2d;
     color: white;
     border: none;
@@ -105,36 +104,55 @@ const msg = document.getElementById("message");
 
 let score = 0;
 let babyX = window.innerWidth / 2;
-const speed = 25; // Velocidade do movimento com as setas
+const speed = 25; 
 let activeIntervals = [];
-let gameLoop;
+let gameTimeout; // Controla o tempo de spawn dinâmico
 let isGameOver = false;
 
-// Atualiza a posição visual do bebé garantindo que não sai do ecrã
+// Configurações de Dificuldade Progressiva
+function getGameSettings() {
+    // Base: queda a cada 20ms mudando 5px. Vamos aumentar os pixels de queda com os pontos.
+    let fallSpeed = 5; 
+    let spawnRate = 900; // milissegundos entre itens
+
+    if (score >= 35) {
+        fallSpeed = 10;
+        spawnRate = 350;
+    } else if (score >= 25) {
+        fallSpeed = 8;
+        spawnRate = 450;
+    } else if (score >= 15) {
+        fallSpeed = 7;
+        spawnRate = 600;
+    } else if (score >= 5) {
+        fallSpeed = 6;
+        spawnRate = 750;
+    }
+
+    return { fallSpeed, spawnRate };
+}
+
 function updateBabyPosition() {
     const babyWidth = baby.offsetWidth || 60;
-    // Limites do ecrã
     if (babyX < babyWidth / 2) babyX = babyWidth / 2;
     if (babyX > window.innerWidth - babyWidth / 2) babyX = window.innerWidth - babyWidth / 2;
     
     baby.style.left = babyX + "px";
 }
 
-// 1. Controlo por Rato (Desktop)
+// Controlos
 document.addEventListener("mousemove",(e)=>{
     if (isGameOver) return;
     babyX = e.clientX;
     updateBabyPosition();
 });
 
-// 2. Controlo por Toque (Mobile)
 document.addEventListener("touchmove",(e)=>{
     if (isGameOver) return;
     babyX = e.touches[0].clientX;
     updateBabyPosition();
 }, { passive: true });
 
-// 3. Controlo por Setas do Teclado (Desktop)
 document.addEventListener("keydown", (e) => {
     if (isGameOver) return;
     if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
@@ -146,14 +164,27 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+// Criar itens e agendar o próximo com base na dificuldade atual
+function spawnLoop() {
+    if (isGameOver) return;
+    
+    createItem();
+    
+    // Calcula a velocidade de spawn atual baseada nos pontos
+    const settings = getGameSettings();
+    gameTimeout = setTimeout(spawnLoop, settings.spawnRate);
+}
+
 function createItem(){
     if (isGameOver) return;
 
     const item = document.createElement("div");
-    const good = Math.random() > 0.25;
+    // Aumenta ligeiramente a hipótese de cocó quando tem muitos pontos
+    const poopChance = score > 20 ? 0.35 : 0.25;
+    const good = Math.random() > poopChance;
 
     item.innerHTML = good
-        ? (Math.random()>0.5 ? "🍼" : "🧸")
+        ? (Math.random() > 0.5 ? "🍼" : "🧸")
         : "💩";
 
     item.classList.add("item");
@@ -165,6 +196,7 @@ function createItem(){
     document.getElementById("game").appendChild(item);
 
     let y = -50;
+    const settings = getGameSettings();
 
     const fall = setInterval(()=>{
         if (isGameOver) {
@@ -172,20 +204,19 @@ function createItem(){
             return;
         }
 
-        y += 5;
+        y += settings.fallSpeed;
         item.style.top = y + "px";
 
         const babyRect = baby.getBoundingClientRect();
         const itemRect = item.getBoundingClientRect();
 
-        // Colisão simplificada e ajustada para mobile
         if(
             itemRect.bottom > babyRect.top &&
             itemRect.top < babyRect.bottom &&
             itemRect.left < babyRect.right &&
             itemRect.right > babyRect.left
         ) {
-            if(item.innerHTML==="💩"){
+            if(item.innerHTML === "💩"){
                 endGame();
             } else {
                 score++;
@@ -201,7 +232,7 @@ function createItem(){
             clearInterval(fall);
         }
 
-    },20);
+    }, 20);
 
     activeIntervals.push(fall);
 }
@@ -214,39 +245,70 @@ function startGame() {
     scoreEl.innerHTML = "Pontos: 0";
     msg.style.display = "none";
     
-    // Limpar itens antigos se sobrarem
     document.querySelectorAll('.item').forEach(item => item.remove());
     
-    gameLoop = setInterval(createItem, 900);
+    // Inicia o ciclo dinâmico
+    spawnLoop();
+}
+
+function getEndingMessage(finalScore) {
+    if (finalScore === 0) {
+        return `
+            <h2>💩 Mas o que é isto?</h2>
+            <br>
+            <p>Fizeste <strong>0 pontos</strong>. Agarraste logo o primeiro presente que caiu do céu? O Baby Manuel está desapontado.</p>
+            <br>
+            <p>🚨 <strong>Castigo:</strong> Vais carregar as grades de cerveja sozinho!</p>
+        `;
+    } else if (finalScore < 10) {
+        return `
+            <h2>👶 Baby Manuel chora...</h2>
+            <br>
+            <p>Conseguiste apenas <strong>${finalScore}</strong> pontos.</p>
+            <br>
+            <p>O bebé ficou com fome e cheio de tédio. Precisas de treinar esses reflexos antes do churrasco!</p>
+        `;
+    } else if (finalScore <= 15) {
+        return `
+            <h2>👍 Nem bom, nem mau</h2>
+            <br>
+            <p>Fizeste <strong>${finalScore}</strong> pontos.</p>
+            <br>
+            <p>Escapaste ao cocó por pouco, mas ainda não estás no topo.</p>
+            <p>Fica com a tua bifana normal (sem direito a repetição!).</p>
+        `;
+    } else if (finalScore <= 30) {
+        return `
+            <h2>🥩 Baby Manuel agradece!</h2>
+            <br>
+            <p>Grande nível! Conseguiste <strong>${finalScore}</strong> pontos.</p>
+            <br>
+            <p><strong>Como prometido:</strong> Fizeste mais de 15 pontos, mereces uma bifana extra no churrasco! Com muito piripiri!</p>
+        `;
+    } else {
+        return `
+            <h2>👑 LENDA DO CHURRASCO!</h2>
+            <br>
+            <p>Incrível! Fizeste <strong>${finalScore}</strong> pontos!</p>
+            <br>
+            <p>Com esta velocidade, o Baby Manuel já está lavado, alimentado e pronto para a faculdade.</p>
+            <p>🏆 Tens direito a lugar VIP ao lado do grelhador e controlo total da playlist!</p>
+        `;
+    }
 }
 
 function endGame(){
     isGameOver = true;
-    clearInterval(gameLoop);
+    clearTimeout(gameTimeout);
     
-    // Limpa todos os intervalos de queda ativos
     activeIntervals.forEach(clearInterval);
     activeIntervals = [];
 
-    msg.style.display="block";
-
-    msg.innerHTML = `
-        <h2>👶 Baby Manuel agradece!</h2>
-        <br>
-        <p>Conseguiste <strong>${score}</strong> pontos.</p>
-        <br>
-        <p>
-        Se fizeste mais de 15 pontos,<br>
-        mereces uma bifana extra no churrasco!
-        </p>
-        <button id="restart-btn" onclick="startGame()">Jogar Novamente</button>
-    `;
+    msg.style.display = "block";
+    msg.innerHTML = getEndingMessage(score) + `<button id="restart-btn" onclick="startGame()">Tentar Outra Vez</button>`;
 }
 
-// Inicia o jogo automaticamente
 startGame();
-
-// Ajusta a posição do bebé caso o ecrã mude de tamanho (ex: rodar o telemóvel)
 window.addEventListener('resize', updateBabyPosition);
 
 </script>
